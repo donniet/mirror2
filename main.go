@@ -2,25 +2,28 @@ package main
 
 // #include <stdio.h>
 // #include <stdlib.h>
-// #cgo LDFLAGS: -lmvnc -lcec
+// #cgo LDFLAGS: -lmvnc
 // #include <mvnc.h>
-// #include <libcec/cecc.h>
 import "C"
 
 import (
 	"encoding/binary"
 	"flag"
+	"github.com/chbmuc/cec"
 	"io/ioutil"
 	"log"
 	"unsafe"
+	"fmt"
 )
 
 var (
 	graphFile = ""
+	deviceName = "Smart Mirror"
 )
 
 func init() {
 	flag.StringVar(&graphFile, "graph", "", "graph file name")
+	flag.StringVar(&deviceName, "deviceName", "Smart Mirror", "CEC Device Name")
 }
 
 func ProcessImage(graphFile string, input <-chan []byte, output chan<- []int) {
@@ -93,32 +96,16 @@ func ProcessImage(graphFile string, input <-chan []byte, output chan<- []int) {
 	}
 }
 
-func PowerSaver(power <-chan bool) {
-	config := C.struct_libcec_configuration{
-		clientVersion: C.LIBCEC_VERSION_CURRENT,
-		bActivateSource: 1,
-	}
-	conn := C.libcec_initialise(&config)
-	defer C.libcec_destroy(conn)
-
-	log.Printf("conn: %#v", conn)
-	// for {
-	// 	if p, ok := <-power; !ok {
-	// 		break
-	// 	} else {
-	// 		log.Printf("power status: %v", p)
-	// 	}
-	// }
-
-
-}
 
 func main() {
 	flag.Parse()
 
-	power := make(chan bool)
-
-	PowerSaver(power)
+	c, err := cec.Open("", deviceName)
+	if err != nil {
+		fmt.Println(err)
+	}
+	//c.PowerOn(0)
+	c.Standby(0)
 
 	// images := make(chan []byte)
 	// people := make(chan []int)
