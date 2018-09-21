@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+<script>
+  var websocketURL = "{{.WebsocketURL}}";
+
+  function onload() {
+    console.log('websocketurl: ' + websocketURL);
+
+    var ws = new WebSocket(websocketURL);
+    ws.onopen = function() {
+      ws.send('{"path":"Weather"}');
+    }
+  }
+
+</script>
+</head>
+<body onload="onload()">
+
+</body>
+</html>

@@ -1,24 +1,25 @@
 package main
 
-// #include <stdio.h>
-// #include <stdlib.h>
-// #cgo LDFLAGS: -lmvnc
-// #include <mvnc.h>
-import "C"
-
 import (
-	"encoding/binary"
+	"encoding/json"
 	"flag"
-	"github.com/chbmuc/cec"
+	"fmt"
 	"io/ioutil"
 	"log"
-	"unsafe"
-	"fmt"
+	"net/http"
+	"sync"
+	"text/template"
+
+	"github.com/gorilla/websocket"
 )
 
 var (
-	graphFile = ""
+	graphFile  = ""
 	deviceName = "Smart Mirror"
+	upgrader   = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 )
 
 func init() {
@@ -26,90 +27,129 @@ func init() {
 	flag.StringVar(&deviceName, "deviceName", "Smart Mirror", "CEC Device Name")
 }
 
-func ProcessImage(graphFile string, input <-chan []byte, output chan<- []int) {
-	var deviceHandle *C.struct_ncDeviceHandle_t
-	var graphHandle *C.struct_ncGraphHandle_t
+type socketHandler struct {
+	lock    *sync.Mutex
+	sockets map[*websocket.Conn]*socket
+	closed  chan *websocket.Conn
+	server  *ServeInterface
+}
 
-	if ret := C.ncDeviceCreate(0, &deviceHandle); ret != 0 {
-		log.Fatalf("could not get device name, error code: %v", ret)
+func newSocketHandler(socketSrc interface{}) *socketHandler {
+	ret := &socketHandler{
+		lock:    &sync.Mutex{},
+		sockets: make(map[*websocket.Conn]*socket),
+		closed:  make(chan *websocket.Conn),
+		server:  &ServeInterface{In: socketSrc},
 	}
-	defer C.ncDeviceDestroy(&deviceHandle)
+	go ret.processClosed()
+	return ret
+}
 
-	if ret := C.ncDeviceOpen(deviceHandle); ret != 0 {
-		log.Fatalf("could not open device: %v", ret)
-	}
-	defer C.ncDeviceClose(deviceHandle)
-
-	if ret := C.ncGraphCreate(C.CString("faces"), &graphHandle); ret != 0 {
-		log.Fatalf("could not create graph, %v", ret)
-	}
-
-	var inputFifo, outputFifo *C.struct_ncFifoHandle_t
-
-	if b, err := ioutil.ReadFile(graphFile); err != nil {
-		log.Fatal(err)
-	} else if ret := C.ncGraphAllocateWithFifos(deviceHandle, graphHandle, unsafe.Pointer(&b[0]), C.uint(len(b)), &inputFifo, &outputFifo); ret != 0 {
-		log.Fatalf("error allocating graph: %v", ret)
-	}
-
-	defer C.ncFifoDestroy(&inputFifo)
-	defer C.ncFifoDestroy(&outputFifo)
-	defer C.ncGraphDestroy(&graphHandle)
-
-	fifoOutputSize := C.uint(0)
-	optionDataLen := C.uint(4)
-
-	C.ncFifoGetOption(outputFifo, C.NC_RO_FIFO_ELEMENT_DATA_SIZE, unsafe.Pointer(&fifoOutputSize), &optionDataLen)
-
-	log.Printf("fifo output size: %d", fifoOutputSize)
-
-	go func() {
-		b := make([]byte, fifoOutputSize)
-		user := unsafe.Pointer(nil)
-		for {
-			if ret := C.ncFifoReadElem(outputFifo, unsafe.Pointer(&b[0]), &fifoOutputSize, &user); ret != 0 {
-				log.Printf("error reading from output fifo: %v", ret)
-				break
-			}
-			var dat []int
-
-			for start := 0; start < int(fifoOutputSize); start += 4 {
-				d, _ := binary.Varint(b[start : start+4])
-				dat = append(dat, int(d))
-			}
-			output <- dat
-		}
-	}()
-
-	for {
-		select {
-		case b, ok := <-input:
-			blen := C.uint(len(b))
-			if !ok {
-				break
-			} else if ret := C.ncFifoWriteElem(inputFifo, unsafe.Pointer(&b[0]), &blen, unsafe.Pointer(nil)); ret != 0 {
-				log.Printf("error writing fifo, %v", ret)
-			} else if ret := C.ncGraphQueueInference(graphHandle, &inputFifo, 1, &outputFifo, 1); ret != 0 {
-				log.Printf("error queuing inference, %v", ret)
-			}
-		}
+func (handler *socketHandler) Write(msg []byte) {
+	handler.lock.Lock()
+	defer handler.lock.Unlock()
+	for _, s := range handler.sockets {
+		s.Out <- msg
 	}
 }
 
+func (handler *socketHandler) processClosed() {
+	for c := range handler.closed {
+		handler.lock.Lock()
+		delete(handler.sockets, c)
+		handler.lock.Unlock()
+	}
+}
+
+type socketRequest struct {
+	Path  string      `json:"path"`
+	Value interface{} `json:"value"`
+}
+
+func (handler *socketHandler) processSocket(sock *socket) {
+	for b := range sock.In {
+		var dat socketRequest
+		var ret interface{}
+		var err error
+		var msg []byte
+		dd := make(map[string]interface{})
+
+		if err = json.Unmarshal(b, &dat); err != nil {
+			goto writeError
+		}
+		if ret, err = handler.server.Serve(dat.Path, dat.Value); err != nil {
+			goto writeError
+		}
+		dd[dat.Path] = ret
+		if msg, err = json.Marshal(dd); err != nil {
+			goto writeError
+		}
+		goto writeMessage
+	writeError:
+		log.Println(err)
+		msg, _ = json.Marshal(map[string]string{"error": err.Error()})
+	writeMessage:
+		sock.Out <- msg
+	}
+}
+
+func (handler *socketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if conn, err := upgrader.Upgrade(w, r, nil); err != nil {
+		log.Println(err)
+		http.Error(w, err.Error(), 500)
+	} else {
+		handler.lock.Lock()
+		defer handler.lock.Unlock()
+
+		sock := newSocket(conn, handler.closed)
+		handler.sockets[conn] = sock
+		go handler.processSocket(sock)
+	}
+}
 
 func main() {
 	flag.Parse()
 
-	c, err := cec.Open("", deviceName)
-	if err != nil {
-		fmt.Println(err)
-	}
-	//c.PowerOn(0)
-	c.Standby(0)
+	// s := Service{}
 
-	// images := make(chan []byte)
-	// people := make(chan []int)
-	//
-	// ProcessImage(graphFile, images, people)
+	// c, err := cec.Open("", deviceName)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// } else {
+	// 	defer c.Destroy()
+	// 	//c.PowerOn(0)
+	// 	c.Standby(0)
+	// }
+
+	// d, _ := NewCECDisplay("", deviceName)
+	ui := NewMirrorInterface("http://api.wunderground.com/api/52a3d65a04655627/forecast/q/MN/Minneapolis.json")
+
+	images := make(chan ImageRequest)
+
+	go func() {
+		if err := ProcessImage(graphFile, images); err != nil {
+			log.Printf("error from image processor, %v", err)
+		}
+	}()
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if ind, err := ioutil.ReadFile("client/index.html"); err != nil {
+			http.Error(w, err.Error(), 500)
+		} else if tmpl, err := template.New("index").Parse(string(ind)); err != nil {
+			http.Error(w, err.Error(), 500)
+		} else {
+			tmpl.Execute(w, struct {
+				WebsocketURL string
+			}{
+				WebsocketURL: fmt.Sprintf("ws://%s/api/uisocket", r.Host),
+			})
+		}
+	})
+
+	http.Handle("/api/uisocket", newSocketHandler(ui))
+	http.Handle("/api/", http.StripPrefix("/api/", &ServeInterface{ui}))
+
+	log.Printf("serving on :8000")
+	log.Fatal(http.ListenAndServe(":8000", nil))
 
 }
