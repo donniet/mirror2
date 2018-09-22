@@ -25,11 +25,13 @@ type MotionReceiver interface {
 }
 
 type UserInterface interface {
-	Streams() []UIElement
+	Streams() []StreamElement
 	Weather() WeatherElement
 	DateTime() UIElement
 	Video() VideoService
 	Display() Display
+	AddStream(name string, url string)
+	RemoveStream(url string)
 }
 
 type UIElement interface {
@@ -38,6 +40,11 @@ type UIElement interface {
 	Hide()
 	Visible() bool
 	HasError() error
+}
+
+type StreamElement interface {
+	UIElement
+	URL() string
 }
 
 type WeatherElement interface {

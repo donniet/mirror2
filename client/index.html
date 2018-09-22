@@ -5,12 +5,21 @@
   var websocketURL = "{{.WebsocketURL}}";
 
   function onload() {
-    console.log('websocketurl: ' + websocketURL);
+    // console.log('websocketurl: ' + websocketURL);
 
     var ws = new WebSocket(websocketURL);
     ws.onopen = function() {
-      ws.send('{"path":"Weather"}');
+      // ws.send('{"path":"Weather"}');
+      setupSocket(ws)
     }
+    // retry forever
+    ws.onclose = function() {
+      setTimeout(onload, 5000);
+    }
+  }
+
+  function setupSocket(ws) {
+
   }
 
 </script>

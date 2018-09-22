@@ -92,7 +92,7 @@ func (s *ServeInterface) Serve(path string, value interface{}) (ret interface{},
 }
 
 func servePath(val reflect.Value, path []string) (ret interface{}, err error) {
-	if len(path) == 0 {
+	if len(path) == 0 || path[0] == "" {
 		if val.CanInterface() {
 			ret = val.Interface()
 		}

@@ -25,7 +25,52 @@ func NewMirrorInterface(weatherURL string) *mirrorInterface {
 			visible: false,
 			changed: c,
 		},
+		streams: make(map[string]*streamElement),
 	}
+}
+
+type streamElement struct {
+	url     string
+	name    string
+	visible bool
+	changed chan<- UIElement
+}
+
+func (e *streamElement) UnmarshalJSON([]byte) error {
+	return nil
+}
+
+func (e *streamElement) MarshalJSON() ([]byte, error) {
+	ret := make(map[string]interface{})
+	ret["url"] = e.url
+	ret["name"] = e.name
+	ret["visible"] = e.visible
+	return json.Marshal(ret)
+}
+
+func (e *streamElement) URL() string {
+	return e.url
+}
+func (e *streamElement) Visible() bool {
+	return e.visible
+}
+func (e *streamElement) Name() string {
+	return e.name
+}
+func (e *streamElement) Show() {
+	if !e.visible {
+		e.visible = true
+		e.changed <- e
+	}
+}
+func (e *streamElement) Hide() {
+	if e.visible {
+		e.visible = false
+		e.changed <- e
+	}
+}
+func (e *streamElement) HasError() error {
+	return nil
 }
 
 type mirrorInterface struct {
@@ -33,10 +78,28 @@ type mirrorInterface struct {
 	weather *weatherElement
 	date    *dateTimeElement
 	display *CECDisplay
+	streams map[string]*streamElement
+	video   *videoElement
 }
 
-func (ui *mirrorInterface) Streams() []UIElement {
-	return []UIElement{}
+func (ui *mirrorInterface) UnmarshalJSON([]byte) error {
+	return nil
+}
+func (ui *mirrorInterface) MarshalJSON() ([]byte, error) {
+	ret := make(map[string]interface{})
+	ret["streams"] = ui.Streams()
+	ret["weather"] = ui.Weather()
+	ret["dateTime"] = ui.DateTime()
+	ret["video"] = ui.Video()
+	ret["display"] = ui.Display()
+	return json.Marshal(ret)
+}
+
+func (ui *mirrorInterface) Streams() (ret []StreamElement) {
+	for _, e := range ui.streams {
+		ret = append(ret, e)
+	}
+	return
 }
 
 func (ui *mirrorInterface) Weather() WeatherElement {
@@ -47,17 +110,42 @@ func (ui *mirrorInterface) DateTime() UIElement {
 	return ui.date
 }
 
-func (ui *mirrorInterface) Video() UIElement {
-	return nil
+func (ui *mirrorInterface) Video() VideoService {
+	return ui.video
 }
 
 func (ui *mirrorInterface) Display() Display {
 	return ui.display
 }
 
+func (ui *mirrorInterface) AddStream(name string, url string) {
+	if s, ok := ui.streams[url]; ok {
+		s.name = name
+	} else {
+		ui.streams[url] = &streamElement{
+			name:    name,
+			url:     url,
+			visible: false,
+		}
+	}
+}
+
+func (ui *mirrorInterface) RemoveStream(url string) {
+	delete(ui.streams, url)
+}
+
 type dateTimeElement struct {
 	visible bool
 	changed chan<- UIElement
+}
+
+func (e *dateTimeElement) UnmarshalJSON(b []byte) error {
+	return nil
+}
+func (e *dateTimeElement) MarshalJSON() ([]byte, error) {
+	ret := make(map[string]interface{})
+	ret["visible"] = e.visible
+	return json.Marshal(ret)
 }
 
 func (e *dateTimeElement) Visible() bool {
@@ -130,11 +218,15 @@ func (e *weatherElement) UnmarshalJSON(b []byte) error {
 func (e *weatherElement) MarshalJSON() ([]byte, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	return json.Marshal(map[string]interface{}{
+	r := map[string]interface{}{
 		"high": e.high,
 		"low":  e.low,
 		"icon": e.icon,
-	})
+	}
+	if e.err != nil {
+		r["error"] = e.err.Error()
+	}
+	return json.Marshal(r)
 }
 
 func (e *weatherElement) HasError() error {
@@ -219,6 +311,76 @@ func (e *weatherElement) Icon() string {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	return e.icon
+}
+
+type videoStateCommand string
+
+const (
+	Play  videoStateCommand = "play"
+	Pause                   = "pause"
+	Stop                    = "stop"
+)
+
+type videoCommand struct {
+	Mute    *bool              `json:"mute,omitempty"`
+	Volume  *int               `json:"volume,omitempty"`
+	Load    string             `json:"load,omitempty"`
+	Command *videoStateCommand `json:"command,omitempty"`
+}
+
+type videoElement struct {
+	visible  bool
+	muted    bool
+	volume   int
+	state    VideoState
+	commands chan<- videoCommand
+	receiver <-chan VideoState
+	lock     *sync.Mutex
+}
+
+func newVideoElement(commands chan<- videoCommand, receiver <-chan VideoState) *videoElement {
+	ret := &videoElement{
+		volume:   100,
+		state:    Unstarted,
+		commands: commands,
+		receiver: receiver,
+		lock:     &sync.Mutex{},
+	}
+	go ret.receiverState()
+	return ret
+}
+
+func (v *videoElement) receiverState() {
+	for s := range v.receiver {
+		v.lock.Lock()
+		v.state = s
+		v.lock.Unlock()
+	}
+}
+
+func (v *videoElement) LoadVideoByID(videoID string)   {}
+func (v *videoElement) LoadVideoByURL(videoURL string) {}
+func (v *videoElement) Play()                          {}
+func (v *videoElement) Pause()                         {}
+func (v *videoElement) Stop()                          {}
+func (v *videoElement) SeekTo(seconds float32)         {}
+func (v *videoElement) Mute()                          {}
+func (v *videoElement) UnMute()                        {}
+func (v *videoElement) IsMuted() bool {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+	return v.muted
+}
+func (v *videoElement) SetVolume(volume int) {}
+func (v *videoElement) Volume() int {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+	return v.volume
+}
+func (v *videoElement) State() VideoState {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+	return v.state
 }
 
 var iconMap = map[string]string{
