@@ -1,0 +1,79 @@
+
+body {
+  background: black;
+  color: white;
+  font-size: 60px;
+  mix-blend-mode: difference;
+  overflow: hidden;
+}
+@keyframes animatedBackground {
+	from { background-position: 0 0; }
+	to { background-position: 100% 50%; }
+}
+#background {
+  background-position: 0px 0px;
+  background-repeat: repeat-x;
+
+  /* animation: animatedBackground 2000s linear infinite; */
+}
+body > canvas {
+  position:absolute;
+  top: 0;
+  left: 0;
+  z-index: -1000;
+}
+#vue {
+  font-family: 'Lato' , sans-serif;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-gap: 5px;
+  grid-auto-rows: minmax(150px, auto);
+  overflow:hidden;
+}
+svg path {
+  fill: white;
+}
+#time {
+  grid-column: 1 / 5;
+  grid-row: 1;
+  font-weight: bold;
+}
+.weather {
+  grid-column: 5;
+  grid-row: 1;
+  text-align: center;
+  font-size: 40px;
+  font-weight: bold;
+}
+#news {
+  font-size: 40px;
+  grid-column: 1/6;
+  grid-row: 3;
+  font-weight: bold;
+  padding: 0px;
+  text-align: left;
+}
+#news li {
+  list-style-type: none;
+  padding: 0px;
+  margin: 0px;
+}
+.videos {
+  grid-column: 1/6;
+  grid-row: 4;
+}
+.full-screen {
+  position: absolute;
+  width: 1080px;
+  height: 1920px;
+  left: 0px;
+  top: 0px;
+  display:block;
+  visibility: inherit;
+}
+.hidden {
+  visibility: hidden;
+}
+/*body {
+  cursor: none;
+}*/

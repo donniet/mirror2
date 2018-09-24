@@ -47,7 +47,7 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if ind, err := ioutil.ReadFile("client/index.html"); err != nil {
 			http.Error(w, err.Error(), 500)
-		} else if tmpl, err := template.New("index").Parse(string(ind)); err != nil {
+		} else if tmpl, err := template.New("index").Delims("[[", "]]").Parse(string(ind)); err != nil {
 			http.Error(w, err.Error(), 500)
 		} else {
 			tmpl.Execute(w, struct {
@@ -58,6 +58,7 @@ func main() {
 		}
 	})
 
+	http.Handle("/client/", http.StripPrefix("/client/", http.FileServer(http.Dir("client/"))))
 	http.Handle("/api/uisocket", newSocketHandler(ui))
 	http.Handle("/api/", http.StripPrefix("/api/", &ServeInterface{ui}))
 
