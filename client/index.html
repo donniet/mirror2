@@ -4,10 +4,22 @@
 <script>
   var websocketURL = "{{.WebsocketURL}}";
 
+  var ws;
+  var dateTime;
+
+  var tileMap = {
+    "datetime": handleDateTime,
+    "display": handleDisplay,
+    "streams": handleStreams,
+    "video": handleVideo,
+    "weather": handleWeather
+  };
+
   function onload() {
     // console.log('websocketurl: ' + websocketURL);
+    dateTime = new DateTime(document.getElementsByClassName('datetime')[0]);
 
-    var ws = new WebSocket(websocketURL);
+    ws = new WebSocket(websocketURL);
     ws.onopen = function() {
       // ws.send('{"path":"Weather"}');
       setupSocket(ws)
@@ -19,12 +31,105 @@
   }
 
   function setupSocket(ws) {
+    ws.onmessage = function(evt) {
+      try {
+        obj = JSON.parse(ext.data);
+        handleMessage(obj);
+      } catch(e) {
+        console.log('error: ', e);
+      }
+    }
+  }
 
+  function sendMessage(obj) {
+    ws.send(JSON.stringify(obj));
+  }
+
+  function handleMessage(obj) {
+    if(!obj) return;
+
+    Object.keys(obj).forEach(key => handleKey(key, obj[key]));
+  }
+
+  function handleDateTime(subkey, obj) {
+
+  }
+  function handleDisplay(subkey, obj) {}
+  function handleStreams(subkey, obj) {}
+  function handleVideo(subkey, obj) {}
+  function handleWeather(subkey, obj) {}
+
+  function handleKey(key, obj) {
+    if (key == "") {
+      Object.keys(obj).forEach(k => {
+        if (tileMap[k.toLowerCase()]) {
+          fileMap[k.toLowerCase()](null, obj[k])
+        }
+      })
+    } else {
+      s = key.split('/');
+      if (tileMap[s[0].toLowerCase()]) {
+        fileMap[s[0].toLowerCase()](s.slice(1), obj);
+      }
+    }
+  }
+
+  function DateTime(el) {
+    this.el = el;
+    this.updater()
+  }
+  DateTime.prototype.updater = function() {
+    var d = new Date();
+    var sec = 60 - d.getSeconds();
+
+    clearNode(this.el);
+    this.el.appendChild(document.createTextNode(formatDate(d)));
+
+    setTimeout(() => this.updater(), sec * 1000);
+  }
+
+  function clearNode(n) {
+    while(n.firstChild) n.removeChild(n.firstChild);
+  }
+
+  var days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+  function formatDate(d) {
+    var hour = d.getHours();
+    var minute = d.getMinutes();
+    var ampm = 'am';
+    if(hour >= 12) {
+      ampm = 'pm';
+    }
+    if(hour == 0) {
+      hour = 12;
+    } else if(hour > 12) {
+      hour -= 12;
+    }
+    if(minute < 10) {
+      minute = '0' + minute;
+    }
+    return days[d.getDay()] + ' ' + months[d.getMonth()] + ' ' + d.getDate() + numberSuffix(d.getDate()) + ' ' + hour + ':' + minute + ampm;
+  }
+
+  function numberSuffix(num) {
+    // num = num << 0;
+
+    var units = num % 10;
+    var tens = Math.floor(num / 10) % 10;
+    if (units == 1 && tens != 1) return 'st';
+    if (units == 2 && tens != 1) return 'nd';
+    if (units == 3 && tens != 1) return 'rd';
+    return 'th';
   }
 
 </script>
 </head>
 <body onload="onload()">
-
+  <div class="datetime"></div>
+  <div class="streams"></div>
+  <div class="video"></div>
+  <div class="weather"></div>
 </body>
 </html>
