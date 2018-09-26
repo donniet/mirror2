@@ -46,7 +46,7 @@ Vue.component('weather', {
         return;
       }
 
-      getXMLAsync('SVG/' + newIcon + '.svg').then(svg => {
+      getXMLAsync('/client/SVG/' + newIcon + '.svg').then(svg => {
         try {
           svg.documentElement.setAttribute('width', '200px');
           svg.documentElement.setAttribute('height', '133px');

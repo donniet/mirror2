@@ -34,12 +34,21 @@ type UserInterface interface {
 	RemoveStream(url string)
 }
 
+type socketRequest struct {
+	Path  string      `json:"path"`
+	Value interface{} `json:"value"`
+}
+
+type socketResponse struct {
+	Request  *socketRequest `json:"request,omitempty"`
+	Response interface{}    `json:"response,omitempty"`
+	Error    string         `json:"error,omitempty"`
+}
+
 type UIElement interface {
-	Name() string
 	Show()
 	Hide()
 	Visible() bool
-	HasError() error
 }
 
 type StreamElement interface {

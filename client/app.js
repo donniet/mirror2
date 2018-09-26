@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', function() {
       news: {},
       weather: {},
       youtube: {},
+      dateTime: {},
       bg: '',
       socket: null,
       clientWidth: 1920,
@@ -86,6 +87,39 @@ document.addEventListener('DOMContentLoaded', function() {
         this.bg = this.backgrounds[this.currentBackground];
         this.currentBackground = (this.currentBackground + 1) % this.backgrounds.length;
       },
+      parseMessage: function(state, msg) {
+        if (msg.error) {
+          console.log('error', msg);
+          return;
+        }
+
+        if (!msg.request || msg.request.path == "" || msg.request.path == "/") {
+          return this.parseResponse(msg.response)
+        }
+
+        switch (msg.request.path) {
+        case "weather":
+          this.weather = msg.response;
+          break;
+        case "dateTime":
+          this.dateTime = msg.response;
+          break;
+        }
+      },
+      parseResponse: function(msg) {
+        for (k in msg) {
+          if (!msg.hasOwnProperty(k)) continue;
+
+          switch(k) {
+          case "weather":
+            this.weather = msg[k];
+            break;
+          case "dateTime":
+            this.dateTime = msg[k];
+            break;
+          }
+        }
+      },
       socketMessage: function(msg) {
         let o;
         try {
@@ -94,33 +128,8 @@ document.addEventListener('DOMContentLoaded', function() {
           console.log(ex);
           return
         }
-
-        for (var k in o) {
-          switch(k) {
-          case "activeVideos":
-            if (JSON.stringify(this.videos) != JSON.stringify(o[k])) {
-              this.videos = o[k];
-            }
-            break;
-          case "news":
-            if (JSON.stringify(this.news) != JSON.stringify(o[k])) {
-              this.news = o[k];
-            }
-            break;
-          case "weather":
-            if (JSON.stringify(this.weather) != JSON.stringify(o[k])) {
-              this.weather = o[k];
-            }
-            break;
-          case "youtube":
-            if (JSON.stringify(this.youtube) != JSON.stringify(o[k])) {
-              this.youtube = o[k];
-            }
-            break;
-          case "config":
-            break;
-          }
-        }
+        console.log('message', o);
+        this.parseMessage(this, o);
       },
       socketClose: function(notimeout) {
         this.socketOpen = false;

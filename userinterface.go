@@ -14,72 +14,50 @@ import (
 	"github.com/donniet/mirror2/wunderground"
 )
 
-func NewMirrorInterface(weatherURL string) *mirrorInterface {
-	c := make(chan UIElement)
+func NewMirrorInterface(weatherURL string, changed chan<- socketResponse) *mirrorInterface {
 	cec, _ := NewCECDisplay("", "Smart Mirror")
-	return &mirrorInterface{
-		changed: c,
-		weather: newWeatherElement(weatherURL, c, time.Hour),
+	mi := &mirrorInterface{
+		changed: changed,
+		weather: newWeatherElement(weatherURL, make(chan bool), time.Hour),
 		display: cec,
 		date: &dateTimeElement{
 			visible: false,
-			changed: c,
+			changed: make(chan bool),
 		},
 		streams: make(map[string]*streamElement),
 	}
-}
-
-type streamElement struct {
-	url     string
-	name    string
-	visible bool
-	changed chan<- UIElement
-}
-
-func (e *streamElement) UnmarshalJSON([]byte) error {
-	return nil
-}
-
-func (e *streamElement) MarshalJSON() ([]byte, error) {
-	ret := make(map[string]interface{})
-	ret["url"] = e.url
-	ret["name"] = e.name
-	ret["visible"] = e.visible
-	return json.Marshal(ret)
-}
-
-func (e *streamElement) URL() string {
-	return e.url
-}
-func (e *streamElement) Visible() bool {
-	return e.visible
-}
-func (e *streamElement) Name() string {
-	return e.name
-}
-func (e *streamElement) Show() {
-	if !e.visible {
-		e.visible = true
-		e.changed <- e
-	}
-}
-func (e *streamElement) Hide() {
-	if e.visible {
-		e.visible = false
-		e.changed <- e
-	}
-}
-func (e *streamElement) HasError() error {
-	return nil
+	go mi.handleChanged()
+	return mi
 }
 
 type mirrorInterface struct {
-	changed chan<- UIElement
+	changed chan<- socketResponse
 	weather *weatherElement
 	date    *dateTimeElement
 	display *CECDisplay
 	streams map[string]*streamElement
 	video   *videoElement
+}
+
+func (ui *mirrorInterface) handleChanged() {
+	for {
+		select {
+		case <-ui.weather.changed:
+			ui.changed <- socketResponse{
+				Request: &socketRequest{
+					Path: "weather",
+				},
+				Response: ui.weather,
+			}
+		case <-ui.date.changed:
+			ui.changed <- socketResponse{
+				Request: &socketRequest{
+					Path: "dateTime",
+				},
+				Response: ui.date,
+			}
+		}
+	}
 }
 
 func (ui *mirrorInterface) UnmarshalJSON([]byte) error {
@@ -136,7 +114,7 @@ func (ui *mirrorInterface) RemoveStream(url string) {
 
 type dateTimeElement struct {
 	visible bool
-	changed chan<- UIElement
+	changed chan bool
 }
 
 func (e *dateTimeElement) UnmarshalJSON(b []byte) error {
@@ -158,16 +136,12 @@ func (e *dateTimeElement) Name() string {
 
 func (e *dateTimeElement) Show() {
 	e.visible = true
-	e.changed <- e
+	e.changed <- true
 }
 
 func (e *dateTimeElement) Hide() {
 	e.visible = false
-	e.changed <- e
-}
-
-func (e *dateTimeElement) HasError() error {
-	return nil
+	e.changed <- true
 }
 
 type weatherElement struct {
@@ -178,13 +152,13 @@ type weatherElement struct {
 	date       time.Time
 	weatherURL string
 	client     *http.Client
-	changed    chan<- UIElement
+	changed    chan bool
 	ticker     *time.Ticker
 	err        error
 	lock       *sync.Mutex
 }
 
-func newWeatherElement(weatherURL string, changed chan<- UIElement, frequency time.Duration) (e *weatherElement) {
+func newWeatherElement(weatherURL string, changed chan bool, frequency time.Duration) (e *weatherElement) {
 	e = &weatherElement{
 		visible:    false,
 		high:       -100,
@@ -219,18 +193,15 @@ func (e *weatherElement) MarshalJSON() ([]byte, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	r := map[string]interface{}{
-		"high": e.high,
-		"low":  e.low,
-		"icon": e.icon,
+		"high":    e.high,
+		"low":     e.low,
+		"icon":    e.icon,
+		"visible": e.visible,
 	}
 	if e.err != nil {
 		r["error"] = e.err.Error()
 	}
 	return json.Marshal(r)
-}
-
-func (e *weatherElement) HasError() error {
-	return e.err
 }
 
 func (e *weatherElement) fetchWeatherThread() {
@@ -273,7 +244,7 @@ func (e *weatherElement) fetchWeather() error {
 		e.date = forecastDay.Date()
 		e.lock.Unlock()
 	}
-	e.changed <- e
+	e.changed <- true
 	return nil
 }
 
@@ -287,12 +258,12 @@ func (e *weatherElement) Name() string {
 
 func (e *weatherElement) Show() {
 	e.visible = true
-	e.changed <- e
+	e.changed <- true
 }
 
 func (e *weatherElement) Hide() {
 	e.visible = false
-	e.changed <- e
+	e.changed <- true
 }
 
 func (e *weatherElement) High() float64 {
@@ -381,6 +352,47 @@ func (v *videoElement) State() VideoState {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 	return v.state
+}
+
+type streamElement struct {
+	url     string
+	name    string
+	visible bool
+	changed chan<- *streamElement
+}
+
+func (e *streamElement) UnmarshalJSON([]byte) error {
+	return nil
+}
+
+func (e *streamElement) MarshalJSON() ([]byte, error) {
+	ret := make(map[string]interface{})
+	ret["url"] = e.url
+	ret["name"] = e.name
+	ret["visible"] = e.visible
+	return json.Marshal(ret)
+}
+
+func (e *streamElement) URL() string {
+	return e.url
+}
+func (e *streamElement) Visible() bool {
+	return e.visible
+}
+func (e *streamElement) Name() string {
+	return e.name
+}
+func (e *streamElement) Show() {
+	if !e.visible {
+		e.visible = true
+		e.changed <- e
+	}
+}
+func (e *streamElement) Hide() {
+	if e.visible {
+		e.visible = false
+		e.changed <- e
+	}
 }
 
 var iconMap = map[string]string{

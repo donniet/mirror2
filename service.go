@@ -12,14 +12,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	// "github.com/gorilla/websocket"
 )
-
-type SocketRequest struct {
-	messageType int
-	req         []byte
-	res         chan<- []byte
-}
 
 type ServeInterface struct {
 	In interface{}
@@ -28,58 +21,6 @@ type ServeInterface struct {
 type SocketError struct {
 	Error string `json:"error,omitempty"`
 }
-
-// func mapify(val reflect.Value) interface{} {
-// 	if val.Kind() == reflect.Invalid {
-// 		return nil
-// 	} else if val.Kind() == reflect.Bool {
-// 		return val.Bool()
-// 	} else if val.Kind() >= reflect.Int && val.Kind() <= reflect.Int64 {
-// 		return val.Int()
-// 	} else if val.Kind() >= reflect.Uint && val.Kind() <= reflect.Uint64 {
-// 		return val.Uint()
-// 	} else if val.Kind() >= reflect.Float32 && val.Kind() <= reflect.Float64 {
-// 		return val.Float()
-// 	} else if val.Kind() >= reflect.Complex64 && val.Kind() <= reflect.Complex128 {
-// 		return val.Complex()
-// 	} else if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
-// 		ret := make([]interface{}, val.Len())
-// 		for i := 0; i < val.Len(); i++ {
-// 			ret[i] = mapify(val.Index(i))
-// 		}
-// 		return ret
-// 	} else if val.Kind() == reflect.Map {
-// 		ret := make(map[string]interface{})
-// 		keys := val.MapKeys()
-// 		for _, key := range keys {
-// 			k := fmt.Sprintf("%v", key)
-// 			ret[k] = mapify(val.MapIndex(key))
-// 		}
-// 		return ret
-// 	} else if val.Kind() == reflect.String {
-// 		return val.String()
-// 	} else if val.Kind() == reflect.Func && val.Type().NumIn() == 0 {
-// 		return mapify(val.Call([]reflect.Value{}))
-// 	} else if val.Kind() == reflect.Ptr {
-// 		return mapify(val.Elem())
-// 	} else if val.Kind() == reflect.Struct || val.Kind() == reflect.Interface {
-// 		ret := make(map[string]interface{})
-// 		t := val.Type()
-// 		if val.Kind() == reflect.Struct {
-// 			for i := 0; i < val.NumField(); i++ {
-// 				ret[t.Field(i).Name] = mapify(val.Field(i))
-// 			}
-// 		}
-// 		for i := 0; i < val.NumMethod(); i++ {
-// 			if m := val.Method(i); m.Type().NumIn() == 0 {
-// 				ret[m.Type().Name()] = mapify(m.Call([]reflect.Value{}))
-// 			}
-// 		}
-// 		return ret
-// 	}
-//
-// 	return fmt.Sprintf("'%s' not supported", val.Kind().String())
-// }
 
 func (s *ServeInterface) Serve(path string, value interface{}) (ret interface{}, err error) {
 	defer func() {
@@ -92,6 +33,15 @@ func (s *ServeInterface) Serve(path string, value interface{}) (ret interface{},
 }
 
 func servePath(val reflect.Value, path []string) (ret interface{}, err error) {
+	if val == (reflect.Value{}) {
+		if len(path) == 0 || path[0] == "" {
+			ret = nil
+		} else {
+			err = fmt.Errorf("null value at %s", strings.Join(path, "/"))
+		}
+		return
+	}
+
 	if len(path) == 0 || path[0] == "" {
 		if val.CanInterface() {
 			ret = val.Interface()

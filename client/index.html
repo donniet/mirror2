@@ -14,14 +14,14 @@
 <body>
   <div id="vue" socket-url="[[.WebsocketURL]]">
     <div id="background" :style="{ background: 'black no-repeat url(' + bg + ')' }"></div>
-    <clock inline-template><div id="time">{{formattedTime}}</div></clock>
-    <weather v-show="!weather.hidden" :weather="weather" inline-template>
+    <clock inline-template v-show="dateTime.visible"><div id="time">{{formattedTime}}</div></clock>
+    <weather v-show="weather.visible" :weather="weather" inline-template>
       <div class="weather">
         <div v-html="svgContent"></div>
         <div class="temp"><div style="padding-right: 75px; text-align: right;">{{formattedLow}}<br/>{{formattedHigh}}</div></div>
       </div>
     </weather>
-    <youtube v-on:player-state-change="updateYoutubePlayerState" :width="clientWidth" :height="clientHeight" :data="youtube"></youtube>
+    <!-- <youtube v-on:player-state-change="updateYoutubePlayerState" :width="clientWidth" :height="clientHeight" :data="youtube"></youtube> -->
     <videos :videolist="videos" :videowidth="640" :videoheight="360"></videos>
 
   </div>

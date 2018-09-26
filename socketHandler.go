@@ -50,34 +50,25 @@ func (handler *socketHandler) processClosed() {
 	}
 }
 
-type socketRequest struct {
-	Path  string      `json:"path"`
-	Value interface{} `json:"value"`
-}
-
 func (handler *socketHandler) processSocket(sock *socket) {
 	for b := range sock.In {
-		var dat socketRequest
-		var ret interface{}
+		res := socketResponse{
+			Request: new(socketRequest),
+		}
 		var err error
 		var msg []byte
-		dd := make(map[string]interface{})
 
-		if err = json.Unmarshal(b, &dat); err != nil {
-			goto writeError
+		if err = json.Unmarshal(b, res.Request); err != nil {
+			res.Request = nil
+			res.Error = err.Error()
+		} else if res.Response, err = handler.server.Serve(res.Request.Path, res.Request.Value); err != nil {
+			res.Error = err.Error()
 		}
-		if ret, err = handler.server.Serve(dat.Path, dat.Value); err != nil {
-			goto writeError
+
+		if msg, err = json.Marshal(res); err != nil {
+			log.Printf("error marshalling response, %v", err)
+			msg = []byte(`{"error":"error marshalling response"}`)
 		}
-		dd[dat.Path] = ret
-		if msg, err = json.Marshal(dd); err != nil {
-			goto writeError
-		}
-		goto writeMessage
-	writeError:
-		log.Println(err)
-		msg, _ = json.Marshal(map[string]string{"error": err.Error()})
-	writeMessage:
 		sock.Out <- msg
 	}
 }

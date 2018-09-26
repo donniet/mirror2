@@ -2,13 +2,22 @@
 body {
   background: black;
   color: white;
-  font-size: 60px;
+  font-size: 40px;
   mix-blend-mode: difference;
   overflow: hidden;
 }
 @keyframes animatedBackground {
 	from { background-position: 0 0; }
 	to { background-position: 100% 50%; }
+}
+#background {
+  position:absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  max-width: 1920px;
+  height: 100%;
+  z-index: -1000;
 }
 #background {
   background-position: 0px 0px;
