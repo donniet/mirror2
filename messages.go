@@ -30,7 +30,7 @@ type UserInterface interface {
 	DateTime() UIElement
 	Video() VideoService
 	Display() Display
-	AddStream(name string, url string)
+	AddStream(url string)
 	RemoveStream(url string)
 }
 
