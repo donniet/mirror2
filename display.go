@@ -14,11 +14,13 @@ type CECDisplay struct {
 	vendorID        uint64
 	physicalAddress string
 	err             error
+	changed         chan bool
 }
 
 func NewCECDisplay(name string, deviceName string) (ret *CECDisplay, err error) {
 	ret = new(CECDisplay)
 	ret.address = 0
+	ret.changed = make(chan bool)
 	ret.connection, ret.err = cec.Open(name, deviceName)
 	if ret.err == nil {
 		ret.powerStatus = ret.PowerStatus()
@@ -42,40 +44,44 @@ func (d *CECDisplay) MarshalJSON() ([]byte, error) {
 	return json.Marshal(r)
 }
 
-func (d *CECDisplay) HasError() error {
-	return d.err
-}
-
 func (d *CECDisplay) PowerOn() {
 	d.connection.PowerOn(d.address)
+	d.changed <- true
 }
 
 func (d *CECDisplay) Standby() {
 	d.connection.Standby(d.address)
+	d.changed <- true
 }
 
 func (d *CECDisplay) VolumeUp() {
 	d.connection.VolumeUp()
+	d.changed <- true
 }
 
 func (d *CECDisplay) VolumeDown() {
 	d.connection.VolumeDown()
+	d.changed <- true
 }
 
 func (d *CECDisplay) Mute() {
 	d.connection.Mute()
+	d.changed <- true
 }
 
 func (d *CECDisplay) KeyPress(key int) {
 	d.connection.KeyPress(d.address, key)
+	d.changed <- true
 }
 
 func (d *CECDisplay) KeyRelease() {
 	d.connection.KeyRelease(d.address)
+	d.changed <- true
 }
 
 func (d *CECDisplay) Key(key int) {
 	d.connection.Key(d.address, key)
+	d.changed <- true
 }
 
 func (d *CECDisplay) OSDName() string {

@@ -97,27 +97,23 @@ document.addEventListener('DOMContentLoaded', function() {
           return this.parseResponse(msg.response)
         }
 
-        switch (msg.request.path) {
-        case "weather":
-          this.weather = msg.response;
-          break;
-        case "dateTime":
-          this.dateTime = msg.response;
-          break;
-        }
+        this.parseResponseKey(msg.request.path, msg.response);
       },
       parseResponse: function(msg) {
         for (k in msg) {
           if (!msg.hasOwnProperty(k)) continue;
 
-          switch(k) {
-          case "weather":
-            this.weather = msg[k];
-            break;
-          case "dateTime":
-            this.dateTime = msg[k];
-            break;
-          }
+          this.parseResponseKey(k, msg[k]);
+        }
+      },
+      parseResponseKey: function(key, obj) {
+        switch(key) {
+        case "weather":
+          this.weather = obj;
+          break;
+        case "dateTime":
+          this.dateTime = obj;
+          break;
         }
       },
       socketMessage: function(msg) {
