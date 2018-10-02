@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type Display interface {
 	PowerOn()
 	Standby()
@@ -14,6 +16,13 @@ type Display interface {
 	VendorID() uint64
 	PhysicalAddress() string
 	PowerStatus() string
+	Sleep(duration string) error /* puts the screen in standby mode and ignores motion for the duration */
+	Wake(duration string) error  /* ensures the screen stays awake for the duration regardless of motion */
+	MotionActivated() bool
+	SleepingUntil() time.Time
+	WakingUntil() time.Time
+	Sleeping() bool
+	Waking() bool
 }
 
 type FaceReceiver interface {

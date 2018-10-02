@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/chbmuc/cec"
 )
@@ -13,13 +15,19 @@ type CECDisplay struct {
 	powerStatus     string
 	vendorID        uint64
 	physicalAddress string
+	afterFunc       *time.Timer
+	afterTime       time.Time
+	sleeping        bool
+	waking          bool
 	err             error
 	changed         chan bool
+	lock            *sync.Mutex
 }
 
 func NewCECDisplay(name string, deviceName string) (ret *CECDisplay, err error) {
 	ret = new(CECDisplay)
 	ret.address = 0
+	ret.lock = &sync.Mutex{}
 	ret.changed = make(chan bool)
 	ret.connection, ret.err = cec.Open(name, deviceName)
 	if ret.err == nil {
@@ -34,23 +42,119 @@ func (d *CECDisplay) UnmarshalJSON(b []byte) error {
 	return nil
 }
 func (d *CECDisplay) MarshalJSON() ([]byte, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	r := make(map[string]interface{})
 	r["powerStatus"] = d.powerStatus
 	r["vendorID"] = strconv.FormatUint(d.vendorID, 16)
 	r["physicalAddress"] = d.physicalAddress
+	r["sleeping"] = d.sleeping
+	r["waking"] = d.waking
 	if d.err != nil {
 		r["error"] = d.err.Error()
 	}
 	return json.Marshal(r)
 }
 
+func (d *CECDisplay) Sleep(duration string) (err error) {
+	d.lock.Lock()
+
+	var dur time.Duration
+	if dur, err = time.ParseDuration(duration); err != nil {
+		return
+	}
+
+	if d.afterFunc != nil {
+		d.afterFunc.Stop()
+		d.afterFunc = nil
+	}
+	d.afterFunc = time.AfterFunc(dur, func() {
+		d.waking = false
+		d.sleeping = false
+		d.afterFunc = nil
+	})
+	d.afterTime = time.Now().Add(dur)
+	d.waking = false
+	d.sleeping = true
+	d.Standby()
+
+	d.lock.Unlock()
+	d.changed <- true
+	return
+}
+func (d *CECDisplay) Wake(duration string) (err error) {
+	d.lock.Lock()
+
+	var dur time.Duration
+	if dur, err = time.ParseDuration(duration); err != nil {
+		return
+	}
+
+	if d.afterFunc != nil {
+		d.afterFunc.Stop()
+		d.afterFunc = nil
+	}
+	d.afterFunc = time.AfterFunc(dur, func() {
+		d.waking = false
+		d.sleeping = false
+		d.afterFunc = nil
+	})
+	d.afterTime = time.Now().Add(dur)
+	d.waking = true
+	d.sleeping = false
+	d.PowerOn()
+	d.lock.Unlock()
+
+	d.changed <- true
+	return
+}
+
+func (d *CECDisplay) MotionActivated() bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return !d.sleeping && !d.waking
+}
+
+func (d *CECDisplay) Sleeping() bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return d.sleeping
+}
+func (d *CECDisplay) Waking() bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return d.waking
+}
+func (d *CECDisplay) SleepingUntil() time.Time {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return d.afterTime
+}
+func (d *CECDisplay) WakingUntil() time.Time {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return d.afterTime
+}
+
 func (d *CECDisplay) PowerOn() {
+	d.lock.Lock()
 	d.connection.PowerOn(d.address)
+	d.powerStatus = "on"
+	d.lock.Unlock()
 	d.changed <- true
 }
 
 func (d *CECDisplay) Standby() {
+	d.lock.Lock()
 	d.connection.Standby(d.address)
+	d.powerStatus = "standby"
+	d.lock.Unlock()
 	d.changed <- true
 }
 
@@ -101,5 +205,15 @@ func (d *CECDisplay) PhysicalAddress() string {
 }
 
 func (d *CECDisplay) PowerStatus() string {
-	return d.connection.GetDevicePowerStatus(d.address)
+	d.lock.Lock()
+
+	p := d.connection.GetDevicePowerStatus(d.address)
+	if p != d.powerStatus {
+		d.powerStatus = p
+		d.lock.Unlock()
+		d.changed <- true
+	} else {
+		d.lock.Unlock()
+	}
+	return p
 }

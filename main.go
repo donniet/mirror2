@@ -13,41 +13,25 @@ import (
 var (
 	graphFile  = ""
 	deviceName = "Smart Mirror"
+	videoFifo  = ""
+	motionFifo = ""
 )
 
 func init() {
 	flag.StringVar(&graphFile, "graph", "", "graph file name")
 	flag.StringVar(&deviceName, "deviceName", "Smart Mirror", "CEC Device Name")
+	flag.StringVar(&videoFifo, "videoFifo", "", "path to the video fifo")
+	flag.StringVar(&motionFifo, "motionFifo", "", "path to the motion vectors fifo")
 }
 
 func main() {
 	flag.Parse()
 
-	// s := Service{}
-
-	// c, err := cec.Open("", deviceName)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// } else {
-	// 	defer c.Destroy()
-	// 	//c.PowerOn(0)
-	// 	c.Standby(0)
-	// }
-
-	// d, _ := NewCECDisplay("", deviceName)
 	changed := make(chan socketResponse)
 
 	ui := NewMirrorInterface(
 		"http://api.wunderground.com/api/52a3d65a04655627/forecast/q/MN/Minneapolis.json",
 		changed)
-
-	images := make(chan ImageRequest)
-
-	go func() {
-		if err := ProcessImage(graphFile, images); err != nil {
-			log.Printf("error from image processor, %v", err)
-		}
-	}()
 
 	socketHandler := newSocketHandler(ui)
 
