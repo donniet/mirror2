@@ -24,6 +24,7 @@ var (
 	magnitude                  = 60
 	totalMotion                = 10
 	detectionThreshold float64 = 0.75
+	addr               string  = ":8080"
 )
 
 func init() {
@@ -36,6 +37,7 @@ func init() {
 	flag.IntVar(&mby, "mby", mby, "motion vector Y")
 	flag.IntVar(&magnitude, "magnitude", magnitude, "magnitude of motion vector")
 	flag.IntVar(&totalMotion, "totalMotion", totalMotion, "total motion vectors to trigger screen")
+	flag.StringVar(&addr, "addr", addr, "address to host")
 }
 
 func main() {
@@ -129,7 +131,7 @@ func main() {
 	http.Handle("/api/uisocket", socketHandler)
 	http.Handle("/api/", http.StripPrefix("/api/", &ServeInterface{ui}))
 
-	log.Printf("serving on :8000")
-	log.Fatal(http.ListenAndServe(":8000", nil))
+	log.Printf("serving on %s", addr)
+	log.Fatal(http.ListenAndServe(addr, nil))
 
 }
