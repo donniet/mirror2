@@ -55,6 +55,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	changed := make(chan socketResponse)
+
+	ui := NewMirrorInterface(
+		"http://api.wunderground.com/api/52a3d65a04655627/forecast/q/MN/Minneapolis.json",
+		changed)
+
 	if motionFifo == "" {
 		log.Printf("disabling motion detection")
 	} else {
@@ -75,6 +81,7 @@ func main() {
 		go func() {
 			for t := range motionDetected {
 				log.Printf("motion detected at %v", t)
+				ui.Display().Wake("10m")
 			}
 		}()
 	}
@@ -94,12 +101,6 @@ func main() {
 		log.Printf("person detector ended, exiting")
 		os.Exit(-1)
 	}()
-
-	changed := make(chan socketResponse)
-
-	ui := NewMirrorInterface(
-		"http://api.wunderground.com/api/52a3d65a04655627/forecast/q/MN/Minneapolis.json",
-		changed)
 
 	socketHandler := newSocketHandler(ui)
 
