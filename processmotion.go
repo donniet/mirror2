@@ -57,6 +57,8 @@ func (proc MotionProcessor) thread(reader io.Reader, motionDetected chan<- time.
 			}
 		}
 
+		log.Printf("total motion vectors above magnitude: %d", c)
+
 		if c > proc.total {
 			// don't get hung up here-- better to process all the vectors in this loop than wait for a full channel
 			go func() {
