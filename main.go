@@ -54,25 +54,25 @@ func main() {
 	} else if vid, err = os.OpenFile(videoFifo, os.O_RDONLY, 0600); err != nil {
 		log.Fatal(err)
 	}
-
+	var socketHandler *socketHandler
 	changed := make(chan socketResponse)
+
+	go func() {
+		for obj := range changed {
+			if b, err := json.Marshal(obj); err != nil {
+				log.Printf("error marshalling changed message: %v", obj)
+			} else if socketHandler != nil {
+				socketHandler.Write(b)
+			}
+		}
+	}()
 
 	log.Printf("starting mirror interface")
 	ui := NewMirrorInterface(
 		"http://api.wunderground.com/api/52a3d65a04655627/forecast/q/MN/Minneapolis.json",
 		changed)
 
-	socketHandler := newSocketHandler(ui)
-
-	go func() {
-		for obj := range changed {
-			if b, err := json.Marshal(obj); err != nil {
-				log.Printf("error marshalling changed message from %v", ui)
-			} else {
-				socketHandler.Write(b)
-			}
-		}
-	}()
+	socketHandler = newSocketHandler(ui)
 
 	if motionFifo == "" {
 		log.Printf("disabling motion detection")
