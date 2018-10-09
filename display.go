@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -53,6 +54,8 @@ func (d *CECDisplay) handleCommands() {
 			d.lock.Lock()
 			d.powerStatus = "on"
 			d.lock.Unlock()
+		case "REPORT_POWER_STATUS":
+			log.Printf("power status change: %#v", c)
 		}
 	}
 }
