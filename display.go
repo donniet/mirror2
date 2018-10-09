@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chbmuc/cec"
+	"github.com/donniet/cec"
 )
 
 type CECDisplay struct {
