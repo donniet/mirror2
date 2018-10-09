@@ -7,25 +7,91 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"text/template"
+	"time"
+
+	"github.com/donniet/mvnc"
 )
 
 var (
-	graphFile  = ""
-	deviceName = "Smart Mirror"
-	videoFifo  = ""
-	motionFifo = ""
+	graphFile                  = ""
+	deviceName                 = "Smart Mirror"
+	videoFifo                  = "-"
+	motionFifo                 = ""
+	mbx                        = 120
+	mby                        = 68
+	magnitude                  = 60
+	totalMotion                = 10
+	detectionThreshold float64 = 0.75
 )
 
 func init() {
-	flag.StringVar(&graphFile, "graph", "", "graph file name")
-	flag.StringVar(&deviceName, "deviceName", "Smart Mirror", "CEC Device Name")
-	flag.StringVar(&videoFifo, "videoFifo", "", "path to the video fifo")
-	flag.StringVar(&motionFifo, "motionFifo", "", "path to the motion vectors fifo")
+	flag.StringVar(&graphFile, "graph", graphFile, "graph file name")
+	flag.StringVar(&deviceName, "deviceName", deviceName, "CEC Device Name")
+	flag.StringVar(&videoFifo, "video", videoFifo, "path to the video fifo")
+	flag.StringVar(&motionFifo, "motion", motionFifo, "path to the motion vectors fifo")
+	flag.Float64Var(&detectionThreshold, "detectionThreshold", detectionThreshold, "threshold to constitute detection")
+	flag.IntVar(&mbx, "mbx", mbx, "motion vector X")
+	flag.IntVar(&mby, "mby", mby, "motion vector Y")
+	flag.IntVar(&magnitude, "magnitude", magnitude, "magnitude of motion vector")
+	flag.IntVar(&totalMotion, "totalMotion", totalMotion, "total motion vectors to trigger screen")
 }
 
 func main() {
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	flag.Parse()
+
+	log.Printf("starting")
+
+	var vid, mot *os.File
+	var err error
+
+	if videoFifo == "-" {
+		vid = os.Stdin
+	} else if vid, err = os.OpenFile(videoFifo, os.O_RDONLY, 0600); err != nil {
+		log.Fatal(err)
+	}
+
+	if motionFifo == "" {
+		log.Printf("disabling motion detection")
+	} else {
+		log.Printf("opening motion fifo")
+		if mot, err = os.OpenFile(motionFifo, os.O_RDONLY, 0600); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("motion processor")
+		motionDetected := MotionProcessor{
+			mbx:       mbx,
+			mby:       mby,
+			magnitude: magnitude,
+			total:     totalMotion,
+			throttle:  500 * time.Millisecond,
+		}.Process(mot)
+
+		log.Printf("starting motion detector")
+		go func() {
+			for t := range motionDetected {
+				log.Printf("motion detected at %v", t)
+			}
+		}()
+	}
+
+	personDetected := mvnc.Graph{
+		GraphFile: graphFile,
+		Names:     map[int]string{0: "donnie", 1: "lauren"},
+		Threshold: float32(detectionThreshold),
+		Throttle:  200 * time.Millisecond,
+	}.Process(vid)
+
+	log.Printf("starting person detector")
+	go func() {
+		for p := range personDetected {
+			log.Printf("person detected: %s", p)
+		}
+		log.Printf("person detector ended, exiting")
+		os.Exit(-1)
+	}()
 
 	changed := make(chan socketResponse)
 
