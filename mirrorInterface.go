@@ -2,11 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 )
 
 func NewMirrorInterface(weatherURL string, changed chan<- socketResponse) *mirrorInterface {
+	log.Printf("creating cec display interface")
 	cec, _ := NewCECDisplay("", "Smart Mirror")
+
+	log.Printf("creating rest of mirror interface")
 	mi := &mirrorInterface{
 		changed: changed,
 		weather: newWeatherElement(weatherURL, make(chan bool), time.Hour),
@@ -18,7 +22,10 @@ func NewMirrorInterface(weatherURL string, changed chan<- socketResponse) *mirro
 		streams:       make(map[string]*streamElement),
 		streamChanged: make(chan *streamElement),
 	}
+
+	log.Printf("starting changed loop")
 	go mi.handleChanged()
+	log.Printf("don creating mirror interface")
 	return mi
 }
 
