@@ -99,9 +99,9 @@ func (d *CECDisplay) Sleep(duration string) (err error) {
 	d.afterTime = time.Now().Add(dur)
 	d.waking = false
 	d.sleeping = true
+	d.lock.Unlock()
 	d.Standby()
 
-	d.lock.Unlock()
 	d.changed <- true
 	return
 }
@@ -125,8 +125,8 @@ func (d *CECDisplay) Wake(duration string) (err error) {
 	d.afterTime = time.Now().Add(dur)
 	d.waking = true
 	d.sleeping = false
-	d.PowerOn()
 	d.lock.Unlock()
+	d.PowerOn()
 
 	d.changed <- true
 	return

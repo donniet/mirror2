@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -51,7 +52,7 @@ func main() {
 
 	if videoFifo == "-" {
 		vid = os.Stdin
-	} else if vid, err = os.OpenFile(videoFifo, os.O_RDONLY, 0600); err != nil {
+	} else if vid, err = os.OpenFile(videoFifo, os.O_RDONLY|syscall.O_NONBLOCK, 0600); err != nil {
 		log.Fatal(err)
 	}
 	var socketHandler *socketHandler
@@ -78,7 +79,7 @@ func main() {
 		log.Printf("disabling motion detection")
 	} else {
 		log.Printf("opening motion fifo")
-		if mot, err = os.OpenFile(motionFifo, os.O_RDONLY, 0600); err != nil {
+		if mot, err = os.OpenFile(motionFifo, os.O_RDONLY|syscall.O_NONBLOCK, 0600); err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("motion processor")
@@ -103,7 +104,7 @@ func main() {
 		GraphFile: graphFile,
 		Names:     map[int]string{0: "donnie", 1: "lauren"},
 		Threshold: float32(detectionThreshold),
-		Throttle:  200 * time.Millisecond,
+		Throttle:  100 * time.Millisecond,
 	}.Process(vid)
 
 	log.Printf("starting person detector")
