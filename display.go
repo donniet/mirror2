@@ -39,8 +39,6 @@ func NewCECDisplay(name string, deviceName string) (ret *CECDisplay, err error) 
 		ret.physicalAddress = ret.PhysicalAddress()
 	}
 	go ret.handleCommands()
-	// put it into a known state
-	ret.PowerOn()
 	return ret, ret.err
 }
 
