@@ -22,20 +22,39 @@ type CECDisplay struct {
 	err             error
 	changed         chan bool
 	lock            *sync.Mutex
+	commands        chan *cec.Command
 }
 
 func NewCECDisplay(name string, deviceName string) (ret *CECDisplay, err error) {
 	ret = new(CECDisplay)
 	ret.address = 0
+	ret.commands = make(chan *cec.Command)
 	ret.lock = &sync.Mutex{}
 	ret.changed = make(chan bool)
 	ret.connection, ret.err = cec.Open(name, deviceName)
+	ret.connection.Commands = ret.commands
 	if ret.err == nil {
 		ret.powerStatus = ret.PowerStatus()
 		ret.vendorID = ret.VendorID()
 		ret.physicalAddress = ret.PhysicalAddress()
 	}
+	go ret.handleCommands()
 	return ret, ret.err
+}
+
+func (d *CECDisplay) handleCommands() {
+	for c := range d.commands {
+		switch c.Operation {
+		case "STANDBY":
+			d.lock.Lock()
+			d.powerStatus = "standby"
+			d.lock.Unlock()
+		case "ROUTING_CHANGE":
+			d.lock.Lock()
+			d.powerStatus = "on"
+			d.lock.Unlock()
+		}
+	}
 }
 
 func (d *CECDisplay) UnmarshalJSON(b []byte) error {
