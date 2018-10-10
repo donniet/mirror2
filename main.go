@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"syscall"
 	"text/template"
 	"time"
 
@@ -50,11 +49,6 @@ func main() {
 	var vid, mot *os.File
 	var err error
 
-	if videoFifo == "-" {
-		vid = os.Stdin
-	} else if vid, err = os.OpenFile(videoFifo, os.O_RDONLY|syscall.O_NONBLOCK, 0600); err != nil {
-		log.Fatal(err)
-	}
 	var socketHandler *socketHandler
 	changed := make(chan socketResponse)
 
@@ -75,46 +69,60 @@ func main() {
 
 	socketHandler = newSocketHandler(ui)
 
-	if motionFifo == "" {
-		log.Printf("disabling motion detection")
+	if videoFifo == "" {
+		log.Printf("facial detection disabled")
 	} else {
-		log.Printf("opening motion fifo")
-		if mot, err = os.OpenFile(motionFifo, os.O_RDONLY|syscall.O_NONBLOCK, 0600); err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("motion processor")
-		motionDetected := MotionProcessor{
-			mbx:       mbx,
-			mby:       mby,
-			magnitude: magnitude,
-			total:     totalMotion,
-			throttle:  500 * time.Millisecond,
-		}.Process(mot)
-
-		log.Printf("starting motion detector")
 		go func() {
-			for t := range motionDetected {
-				log.Printf("motion detected at %v", t)
-				ui.Display().Wake("10m")
+			if videoFifo == "-" {
+				vid = os.Stdin
+			} else if vid, err = os.OpenFile(videoFifo, os.O_RDONLY, 0600); err != nil {
+				log.Fatal(err)
 			}
+
+			personDetected := mvnc.Graph{
+				GraphFile: graphFile,
+				Names:     map[int]string{0: "donnie", 1: "lauren"},
+				Threshold: float32(detectionThreshold),
+				Throttle:  100 * time.Millisecond,
+			}.Process(vid)
+
+			log.Printf("starting person detector")
+			go func() {
+				for p := range personDetected {
+					log.Printf("person detected: %s", p)
+				}
+				log.Printf("person detector ended, exiting")
+				os.Exit(-1)
+			}()
 		}()
 	}
 
-	personDetected := mvnc.Graph{
-		GraphFile: graphFile,
-		Names:     map[int]string{0: "donnie", 1: "lauren"},
-		Threshold: float32(detectionThreshold),
-		Throttle:  100 * time.Millisecond,
-	}.Process(vid)
+	if motionFifo == "" {
+		log.Printf("disabling motion detection")
+	} else {
+		go func() {
+			log.Printf("opening motion fifo")
+			if mot, err = os.OpenFile(motionFifo, os.O_RDONLY, 0600); err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("motion processor")
+			motionDetected := MotionProcessor{
+				mbx:       mbx,
+				mby:       mby,
+				magnitude: magnitude,
+				total:     totalMotion,
+				throttle:  500 * time.Millisecond,
+			}.Process(mot)
 
-	log.Printf("starting person detector")
-	go func() {
-		for p := range personDetected {
-			log.Printf("person detected: %s", p)
-		}
-		log.Printf("person detector ended, exiting")
-		os.Exit(-1)
-	}()
+			log.Printf("starting motion detector")
+			go func() {
+				for t := range motionDetected {
+					log.Printf("motion detected at %v", t)
+					ui.Display().Wake("10m")
+				}
+			}()
+		}()
+	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if ind, err := ioutil.ReadFile("client/index.html"); err != nil {
