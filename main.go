@@ -92,7 +92,7 @@ func main() {
 					log.Printf("person detected: %s", p)
 				}
 				log.Printf("person detector ended, exiting")
-				os.Exit(-1)
+				// os.Exit(-1)
 			}()
 		}()
 	}
@@ -140,7 +140,8 @@ func main() {
 
 	http.Handle("/client/", http.StripPrefix("/client/", http.FileServer(http.Dir("client/"))))
 	http.Handle("/api/uisocket", socketHandler)
-	http.Handle("/api/", http.StripPrefix("/api/", &ServeInterface{ui}))
+	http.Handle("/api/v1/", http.StripPrefix("/api/v1/", &ServeInterface{ui}))
+	http.Handle("/api/v2/", http.StripPrefix("/api/v2/", &API{mirror: ui}))
 
 	log.Printf("serving on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))

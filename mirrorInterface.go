@@ -2,24 +2,43 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"regexp"
+	"strconv"
 	"time"
 )
 
+var (
+	pather = regexp.MustCompile(`[/]?([^/]+)`)
+)
+
+type NotFoundError struct {
+	Path []string
+}
+
+func (n *NotFoundError) Error() string {
+	return fmt.Sprintf("path not found: %v", n.Path)
+}
+
 func NewMirrorInterface(weatherURL string, changed chan<- socketResponse) *mirrorInterface {
 	log.Printf("creating cec display interface")
-	cec, _ := NewCECDisplay("", "Smart Mirror")
+	var disp Display
+	var err error
+	if disp, err = NewCECDisplay("", "Smart Mirror"); err != nil {
+		log.Printf("error opening CEC display, using dummy: %v", err)
+		disp = NewDummyDisplay()
+	}
 
 	log.Printf("creating rest of mirror interface")
 	mi := &mirrorInterface{
 		changed: changed,
 		weather: newWeatherElement(weatherURL, make(chan bool), time.Hour),
-		display: cec,
+		display: disp,
 		date: &dateTimeElement{
 			visible: false,
 			changed: make(chan bool),
 		},
-		streams:       make(map[string]*streamElement),
 		streamChanged: make(chan *streamElement),
 	}
 
@@ -33,8 +52,8 @@ type mirrorInterface struct {
 	changed       chan<- socketResponse
 	weather       *weatherElement
 	date          *dateTimeElement
-	display       *CECDisplay
-	streams       map[string]*streamElement
+	display       Display
+	streams       []*streamElement
 	video         *videoElement
 	streamChanged chan *streamElement
 }
@@ -52,7 +71,7 @@ func (ui *mirrorInterface) handleChanged() {
 				Request:  &socketRequest{Path: "dateTime"},
 				Response: ui.date,
 			}
-		case <-ui.display.changed:
+		case <-ui.display.Changed():
 			ui.changed <- socketResponse{
 				Request:  &socketRequest{Path: "display"},
 				Response: ui.display,
@@ -63,7 +82,105 @@ func (ui *mirrorInterface) handleChanged() {
 	}
 }
 
-func (ui *mirrorInterface) UnmarshalJSON([]byte) error {
+func (ui *mirrorInterface) ServeJSON(path []string, msg *json.RawMessage) (ret *json.RawMessage, err error) {
+	if len(path) > 0 && path[0] == "" {
+		path = path[1:]
+	}
+
+	if len(path) == 0 {
+		if msg != nil {
+			if err = json.Unmarshal(*msg, ui); err != nil {
+				return
+			}
+		}
+
+		var b []byte
+		b, err = json.Marshal(ui)
+		ret = (*json.RawMessage)(&b)
+		return
+	}
+
+	switch path[0] {
+	case "streams":
+		ret, err = ui.serveJSONStreams(path[1:], msg)
+	case "weather":
+		ret, err = ui.weather.ServeJSON(path[1:], msg)
+	case "dateTime":
+		ret, err = ui.date.ServeJSON(path[1:], msg)
+	case "video":
+		ret, err = ui.video.ServeJSON(path[1:], msg)
+	case "display":
+		ret, err = ui.display.ServeJSON(path[1:], msg)
+	default:
+		ret, err = nil, &NotFoundError{Path: path}
+	}
+
+	return
+}
+
+func (ui *mirrorInterface) serveJSONStreams(path []string, msg *json.RawMessage) (*json.RawMessage, error) {
+	ss := ui.Streams()
+
+	if len(path) == 0 {
+		b, err := json.Marshal(ss)
+		return (*json.RawMessage)(&b), err
+	}
+
+	if i, err := strconv.Atoi(path[0]); err != nil {
+		return nil, err
+	} else if i < 0 || i >= len(ss) {
+		return nil, &NotFoundError{Path: path}
+	} else {
+		return ss[i].ServeJSON(path[1:], msg)
+	}
+}
+
+func (ui *mirrorInterface) UnmarshalJSON(data []byte) error {
+	m := make(map[string]*json.RawMessage)
+
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	if w, ok := m["weather"]; ok {
+		if err := json.Unmarshal(*w, ui.weather); err != nil {
+			return err
+		}
+	}
+	if dt, ok := m["dateTime"]; ok {
+		if err := json.Unmarshal(*dt, ui.date); err != nil {
+			return err
+		}
+	}
+	if v, ok := m["video"]; ok {
+		if err := json.Unmarshal(*v, ui.video); err != nil {
+			return err
+		}
+	}
+	if d, ok := m["display"]; ok {
+		if err := json.Unmarshal(*d, ui.display); err != nil {
+			return err
+		}
+	}
+	if s, ok := m["streams"]; ok {
+		var sl []*json.RawMessage
+
+		if err := json.Unmarshal(*s, &sl); err != nil {
+			return err
+		}
+
+		for i, s := range sl {
+			if i >= len(ui.streams) {
+				ui.streams = append(ui.streams, &streamElement{
+					changed: ui.streamChanged,
+				})
+			}
+
+			if err := json.Unmarshal(*s, ui.streams[i]); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 func (ui *mirrorInterface) MarshalJSON() ([]byte, error) {
@@ -76,22 +193,22 @@ func (ui *mirrorInterface) MarshalJSON() ([]byte, error) {
 	return json.Marshal(ret)
 }
 
-func (ui *mirrorInterface) Streams() (ret []StreamElement) {
+func (ui *mirrorInterface) Streams() (ret []*streamElement) {
 	for _, e := range ui.streams {
 		ret = append(ret, e)
 	}
 	return
 }
 
-func (ui *mirrorInterface) Weather() WeatherElement {
+func (ui *mirrorInterface) Weather() *weatherElement {
 	return ui.weather
 }
 
-func (ui *mirrorInterface) DateTime() UIElement {
+func (ui *mirrorInterface) DateTime() *dateTimeElement {
 	return ui.date
 }
 
-func (ui *mirrorInterface) Video() VideoService {
+func (ui *mirrorInterface) Video() *videoElement {
 	return ui.video
 }
 
@@ -100,13 +217,11 @@ func (ui *mirrorInterface) Display() Display {
 }
 
 func (ui *mirrorInterface) AddStream(url string) {
-	if _, ok := ui.streams[url]; !ok {
-		ui.streams[url] = &streamElement{
-			url:     url,
-			visible: false,
-			changed: ui.streamChanged,
-		}
-	}
+	ui.streams = append(ui.streams, &streamElement{
+		url:     url,
+		visible: false,
+		changed: ui.streamChanged,
+	})
 	ui.sendStreamsChanged()
 }
 
@@ -122,12 +237,14 @@ func (ui *mirrorInterface) sendStreamsChanged() {
 	}
 }
 
-func (ui *mirrorInterface) RemoveStream(url string) {
-	if _, ok := ui.streams[url]; ok {
-		delete(ui.streams, url)
-
-		ui.sendStreamsChanged()
+func (ui *mirrorInterface) RemoveStream(index int) {
+	if index < 0 || index >= len(ui.streams) {
+		return
 	}
+
+	ui.streams = append(ui.streams[:index], ui.streams[index+1:]...)
+
+	ui.sendStreamsChanged()
 }
 
 type streamElement struct {
@@ -136,7 +253,50 @@ type streamElement struct {
 	changed chan<- *streamElement
 }
 
-func (e *streamElement) UnmarshalJSON([]byte) error {
+func (e *streamElement) ServeJSON(path []string, msg *json.RawMessage) (*json.RawMessage, error) {
+	if len(path) == 0 {
+		b, err := json.Marshal(e)
+		return (*json.RawMessage)(&b), err
+	}
+
+	if len(path) > 1 {
+		return nil, &NotFoundError{Path: path}
+	}
+
+	var v interface{}
+
+	switch path[0] {
+	case "visible":
+		v = e.visible
+	case "url":
+		v = e.url
+	default:
+	}
+
+	if v == nil {
+		return nil, &NotFoundError{Path: path}
+	}
+	b, err := json.Marshal(v)
+	return (*json.RawMessage)(&b), err
+}
+
+func (e *streamElement) UnmarshalJSON(data []byte) error {
+	m := make(map[string]interface{})
+
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	if u, ok := m["url"]; ok {
+		if e.url, ok = u.(string); !ok {
+			return fmt.Errorf("stream url must be a string")
+		}
+	}
+	if v, ok := m["visible"]; ok {
+		if e.visible, ok = v.(bool); !ok {
+			return fmt.Errorf("stream visible must be a bool")
+		}
+	}
 	return nil
 }
 

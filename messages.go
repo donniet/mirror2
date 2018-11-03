@@ -1,8 +1,16 @@
 package main
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
+
+type Server interface {
+	ServeJSON(paths []string, msg *json.RawMessage) (*json.RawMessage, error)
+}
 
 type Display interface {
+	Server
 	PowerOn()
 	Standby()
 	VolumeUp()
@@ -23,24 +31,7 @@ type Display interface {
 	WakingUntil() time.Time
 	Sleeping() bool
 	Waking() bool
-}
-
-type FaceReceiver interface {
-	FaceDetected(face string)
-}
-
-type MotionReceiver interface {
-	MotionDetected()
-}
-
-type UserInterface interface {
-	Streams() []StreamElement
-	Weather() WeatherElement
-	DateTime() UIElement
-	Video() VideoService
-	Display() Display
-	AddStream(url string)
-	RemoveStream(url string)
+	Changed() <-chan bool
 }
 
 type socketRequest struct {
@@ -54,24 +45,6 @@ type socketResponse struct {
 	Error    string         `json:"error,omitempty"`
 }
 
-type UIElement interface {
-	Show()
-	Hide()
-	Visible() bool
-}
-
-type StreamElement interface {
-	UIElement
-	URL() string
-}
-
-type WeatherElement interface {
-	UIElement
-	High() float64
-	Low() float64
-	Icon() string
-}
-
 type VideoState int
 
 const (
@@ -82,22 +55,3 @@ const (
 	Buffering VideoState = 3
 	Cued      VideoState = 5
 )
-
-type VideoService interface {
-	LoadVideoByID(videoId string)
-	LoadVideoByURL(videoURL string)
-	Play()
-	Pause()
-	Stop()
-	SeekTo(seconds float32)
-	Mute()
-	UnMute()
-	IsMuted() bool
-	SetVolume(volume int)
-	Volume() int
-	State() VideoState
-}
-
-type VideoReceiver interface {
-	StateChange(state VideoState)
-}

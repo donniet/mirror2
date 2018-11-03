@@ -55,7 +55,59 @@ func newWeatherElement(weatherURL string, changed chan bool, frequency time.Dura
 	return e
 }
 
+func (e *weatherElement) ServeJSON(path []string, msg *json.RawMessage) (*json.RawMessage, error) {
+	if len(path) == 0 {
+		b, err := json.Marshal(e)
+		return (*json.RawMessage)(&b), err
+	}
+
+	if len(path) > 1 {
+		return nil, &NotFoundError{Path: path}
+	}
+
+	var v interface{}
+
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
+	switch path[0] {
+	case "visible":
+		v = e.visible
+	case "high":
+		v = e.high
+	case "low":
+		v = e.low
+	case "icon":
+		v = e.icon
+	case "date":
+		v = e.date
+	default:
+		return nil, &NotFoundError{Path: path}
+	}
+
+	b, err := json.Marshal(v)
+	return (*json.RawMessage)(&b), err
+}
+
 func (e *weatherElement) UnmarshalJSON(b []byte) error {
+	m := make(map[string]interface{})
+
+	if err := json.Unmarshal(b, &m); err != nil {
+		return err
+	}
+
+	if v, ok := m["visible"]; ok {
+		vis := false
+		if vis, ok = v.(bool); !ok {
+			return fmt.Errorf("weather visible must be a boolean")
+		}
+
+		if vis && !e.Visible() {
+			e.Show()
+		} else if !vis && e.Visible() {
+			e.Hide()
+		}
+	}
 	return nil
 }
 
@@ -67,6 +119,7 @@ func (e *weatherElement) MarshalJSON() ([]byte, error) {
 		"low":     e.low,
 		"icon":    e.icon,
 		"visible": e.visible,
+		"date":    e.date,
 	}
 	if e.err != nil {
 		r["error"] = e.err.Error()
