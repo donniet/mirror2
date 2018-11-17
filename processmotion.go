@@ -67,4 +67,5 @@ func (proc MotionProcessor) thread(reader io.Reader, motionDetected chan<- time.
 			}()
 		}
 	}
+	log.Printf("finishing motion detect")
 }

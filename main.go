@@ -123,7 +123,9 @@ func main() {
 					select {
 					case t := <-motionDetected:
 						log.Printf("motion detected at %v", t)
-						ui.Display().PowerOn()
+						if ui.Display().PowerStatus() != "on" {
+							ui.Display().PowerOn()
+						}
 						sleepAt = t.Add(10 * time.Minute)
 					case <-checker.C:
 						log.Printf("checking power status")
