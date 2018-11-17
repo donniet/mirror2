@@ -91,7 +91,7 @@ func main() {
 				for p := range personDetected {
 					log.Printf("person detected: %s", p)
 				}
-				log.Printf("person detector ended, exiting")
+				// log.Printf("person detector ended, exiting")
 				// os.Exit(-1)
 			}()
 		}()
@@ -114,11 +114,24 @@ func main() {
 				throttle:  500 * time.Millisecond,
 			}.Process(mot)
 
+			sleepAt := time.Now()
+			checker := time.NewTimer(1 * time.Minute)
+
 			log.Printf("starting motion detector")
 			go func() {
-				for t := range motionDetected {
-					log.Printf("motion detected at %v", t)
-					ui.Display().Wake("10m")
+				for {
+					select {
+					case t := <-motionDetected:
+						log.Printf("motion detected at %v", t)
+						ui.Display().PowerOn()
+						sleepAt = t.Add(10 * time.Minute)
+					case <-checker.C:
+						log.Printf("checking power status")
+						powerStatus := ui.Display().PowerStatus()
+						if powerStatus == "on" && sleepAt.Before(time.Now()) {
+							ui.Display().Standby()
+						}
+					}
 				}
 			}()
 		}()
