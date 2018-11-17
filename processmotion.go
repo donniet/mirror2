@@ -61,7 +61,7 @@ func (proc MotionProcessor) thread(reader io.Reader, motionDetected chan<- time.
 
 		if c > proc.total {
 			// don't get hung up here-- better to process all the vectors in this loop than wait for a full channel
-			log.Printf("motion detected")
+			log.Printf("motion detected: %d", c)
 			go func() {
 				motionDetected <- last
 			}()
