@@ -136,6 +136,7 @@ func main() {
 						log.Printf("checking power status")
 						powerStatus := ui.Display().PowerStatus()
 						if powerStatus == "on" && sleepAt.Before(time.Now()) {
+							log.Printf("putting display on standby")
 							ui.Display().Standby()
 						}
 					}

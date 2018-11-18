@@ -7,19 +7,15 @@ Vue.component('videos', {
     if (!this.videolist) return;
 
     var elements = this.videolist.map(vid => {
-      if (vid.type == 'MJPEG') {
-        console.log('adding MJPEG video');
-        return createElement('mjpegVideo', {
-          props: {
-            videoUrl: vid.url,
-            width: this.videowidth,
-            height: this.videoheight,
-            hidden: vid.hidden,
-          }
-        });
-      } else {
-        console.log('unknown video type: ', vid.type);
-      }
+      console.log('adding MJPEG video');
+      return createElement('mjpegVideo', {
+        props: {
+          videoUrl: vid.url,
+          width: this.videowidth,
+          height: this.videoheight,
+          hidden: !vid.visible,
+        }
+      });
     });
 
     return createElement('div', {

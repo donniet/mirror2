@@ -72,6 +72,11 @@ func (e *weatherElement) ServeJSON(path []string, msg *json.RawMessage) (*json.R
 
 	switch path[0] {
 	case "visible":
+		if msg != nil {
+			if err := json.Unmarshal(*msg, &e.visible); err != nil {
+				return nil, err
+			}
+		}
 		v = e.visible
 	case "high":
 		v = e.high

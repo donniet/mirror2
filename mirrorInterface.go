@@ -122,16 +122,34 @@ func (ui *mirrorInterface) serveJSONStreams(path []string, msg *json.RawMessage)
 	ss := ui.Streams()
 
 	if len(path) == 0 {
+		// if the msg is not null, consisider this a PUT
+		if msg != nil {
+			s := new(streamElement)
+			if err := json.Unmarshal(*msg, s); err != nil {
+				return nil, err
+			}
+			s = ui.AddStream(s.url, s.visible)
+		}
+
 		b, err := json.Marshal(ss)
 		return (*json.RawMessage)(&b), err
 	}
 
 	if i, err := strconv.Atoi(path[0]); err != nil {
 		return nil, err
-	} else if i < 0 || i >= len(ss) {
-		return nil, &NotFoundError{Path: path}
-	} else {
+	} else if i >= 0 || i < len(ss) {
 		return ss[i].ServeJSON(path[1:], msg)
+	} else if i == len(ss) && msg != nil && len(path) == 1 {
+		s := new(streamElement)
+		if err := json.Unmarshal(*msg, s); err != nil {
+			return nil, err
+		}
+		s = ui.AddStream(s.url, s.visible)
+
+		b, err := json.Marshal(s)
+		return (*json.RawMessage)(&b), err
+	} else {
+		return nil, &NotFoundError{Path: path}
 	}
 }
 
@@ -216,13 +234,15 @@ func (ui *mirrorInterface) Display() Display {
 	return ui.display
 }
 
-func (ui *mirrorInterface) AddStream(url string) {
-	ui.streams = append(ui.streams, &streamElement{
+func (ui *mirrorInterface) AddStream(url string, visible bool) *streamElement {
+	s := &streamElement{
 		url:     url,
-		visible: false,
+		visible: visible,
 		changed: ui.streamChanged,
-	})
+	}
+	ui.streams = append(ui.streams, s)
 	ui.sendStreamsChanged()
+	return s
 }
 
 func (ui *mirrorInterface) sendStreamsChanged() {

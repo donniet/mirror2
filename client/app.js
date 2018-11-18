@@ -114,6 +114,10 @@ document.addEventListener('DOMContentLoaded', function() {
         case "dateTime":
           this.dateTime = obj;
           break;
+        case "streams":
+          this.videos = obj;
+          console.log("streams", obj);
+          break;
         }
       },
       socketMessage: function(msg) {

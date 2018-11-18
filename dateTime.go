@@ -28,6 +28,11 @@ func (e *dateTimeElement) ServeJSON(path []string, msg *json.RawMessage) (*json.
 
 	switch path[0] {
 	case "visible":
+		if msg != nil {
+			if err := json.Unmarshal(*msg, &e.visible); err != nil {
+				return nil, err
+			}
+		}
 		b, err := json.Marshal(e.visible)
 		return (*json.RawMessage)(&b), err
 	default:
