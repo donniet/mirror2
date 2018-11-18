@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"regexp"
 	"strconv"
@@ -21,7 +22,7 @@ func (n *NotFoundError) Error() string {
 	return fmt.Sprintf("path not found: %v", n.Path)
 }
 
-func NewMirrorInterface(weatherURL string, changed chan<- socketResponse) *mirrorInterface {
+func NewMirrorInterface(weatherURL string, changed chan<- socketResponse, persistenceFile string) *mirrorInterface {
 	log.Printf("creating cec display interface")
 	var disp Display
 	var err error
@@ -39,7 +40,14 @@ func NewMirrorInterface(weatherURL string, changed chan<- socketResponse) *mirro
 			visible: false,
 			changed: make(chan bool),
 		},
-		streamChanged: make(chan *streamElement),
+		streamChanged:   make(chan *streamElement),
+		persistenceFile: persistenceFile,
+	}
+
+	if b, err := ioutil.ReadFile(persistenceFile); err == nil {
+		if err = json.Unmarshal(b, mi); err != nil {
+			log.Printf("error reading persistence file: %v", err)
+		}
 	}
 
 	log.Printf("starting changed loop")
@@ -49,13 +57,22 @@ func NewMirrorInterface(weatherURL string, changed chan<- socketResponse) *mirro
 }
 
 type mirrorInterface struct {
-	changed       chan<- socketResponse
-	weather       *weatherElement
-	date          *dateTimeElement
-	display       Display
-	streams       []*streamElement
-	video         *videoElement
-	streamChanged chan *streamElement
+	changed         chan<- socketResponse
+	weather         *weatherElement
+	date            *dateTimeElement
+	display         Display
+	streams         []*streamElement
+	video           *videoElement
+	streamChanged   chan *streamElement
+	persistenceFile string
+}
+
+func (ui *mirrorInterface) persist() {
+	if b, err := json.Marshal(ui); err != nil {
+		log.Fatal(err)
+	} else if err = ioutil.WriteFile(ui.persistenceFile, b, 0660); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (ui *mirrorInterface) handleChanged() {
@@ -66,11 +83,13 @@ func (ui *mirrorInterface) handleChanged() {
 				Request:  &socketRequest{Path: "weather"},
 				Response: ui.weather,
 			}
+			ui.persist()
 		case <-ui.date.changed:
 			ui.changed <- socketResponse{
 				Request:  &socketRequest{Path: "dateTime"},
 				Response: ui.date,
 			}
+			ui.persist()
 		case <-ui.display.Changed():
 			ui.changed <- socketResponse{
 				Request:  &socketRequest{Path: "display"},
@@ -78,6 +97,7 @@ func (ui *mirrorInterface) handleChanged() {
 			}
 		case <-ui.streamChanged:
 			ui.sendStreamsChanged()
+			ui.persist()
 		}
 	}
 }
@@ -160,27 +180,27 @@ func (ui *mirrorInterface) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	if w, ok := m["weather"]; ok {
+	if w := m["weather"]; w != nil {
 		if err := json.Unmarshal(*w, ui.weather); err != nil {
 			return err
 		}
 	}
-	if dt, ok := m["dateTime"]; ok {
+	if dt := m["dateTime"]; dt != nil {
 		if err := json.Unmarshal(*dt, ui.date); err != nil {
 			return err
 		}
 	}
-	if v, ok := m["video"]; ok {
+	if v := m["video"]; v != nil {
 		if err := json.Unmarshal(*v, ui.video); err != nil {
 			return err
 		}
 	}
-	if d, ok := m["display"]; ok {
+	if d := m["display"]; d != nil {
 		if err := json.Unmarshal(*d, ui.display); err != nil {
 			return err
 		}
 	}
-	if s, ok := m["streams"]; ok {
+	if s := m["streams"]; s != nil {
 		var sl []*json.RawMessage
 
 		if err := json.Unmarshal(*s, &sl); err != nil {
@@ -241,7 +261,7 @@ func (ui *mirrorInterface) AddStream(url string, visible bool) *streamElement {
 		changed: ui.streamChanged,
 	}
 	ui.streams = append(ui.streams, s)
-	ui.sendStreamsChanged()
+	ui.streamChanged <- s
 	return s
 }
 

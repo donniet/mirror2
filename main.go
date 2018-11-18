@@ -25,6 +25,7 @@ var (
 	totalMotion                = 10
 	detectionThreshold float64 = 0.75
 	addr               string  = ":8080"
+	persistenceFile    string  = "persist.json"
 )
 
 func init() {
@@ -38,6 +39,7 @@ func init() {
 	flag.IntVar(&magnitude, "magnitude", magnitude, "magnitude of motion vector")
 	flag.IntVar(&totalMotion, "totalMotion", totalMotion, "total motion vectors to trigger screen")
 	flag.StringVar(&addr, "addr", addr, "address to host")
+	flag.StringVar(&persistenceFile, "persistenceFile", persistenceFile, "file to persist to")
 }
 
 func main() {
@@ -65,7 +67,7 @@ func main() {
 	log.Printf("starting mirror interface")
 	ui := NewMirrorInterface(
 		"http://api.wunderground.com/api/52a3d65a04655627/forecast/q/MN/Minneapolis.json",
-		changed)
+		changed, persistenceFile)
 
 	socketHandler = newSocketHandler(ui)
 
