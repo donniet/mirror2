@@ -116,11 +116,12 @@ func main() {
 				throttle:  500 * time.Millisecond,
 			}.Process(mot)
 
-			sleepAt := time.Now()
-			checker := time.NewTimer(1 * time.Minute)
-
 			log.Printf("starting motion detector")
 			go func() {
+
+				sleepAt := time.Now()
+				checker := time.NewTicker(1 * time.Minute)
+
 				for {
 					select {
 					case t := <-motionDetected:
