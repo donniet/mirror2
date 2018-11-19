@@ -309,6 +309,7 @@ func NewCECDisplay(name string, deviceName string) (ret *CECDisplay, err error) 
 	ret.lock = &sync.Mutex{}
 	ret.changed = make(chan bool)
 	ret.connection, ret.err = cec.Open(name, deviceName)
+	log.Printf("connection openned, setting internal variables")
 	if ret.err == nil {
 		ret.connection.Commands = ret.commands
 		ret.powerStatus = ret.PowerStatus()
@@ -551,9 +552,13 @@ func (d *CECDisplay) PowerStatus() string {
 
 	p := d.connection.GetDevicePowerStatus(d.address)
 	if p != d.powerStatus {
+		old := d.powerStatus
 		d.powerStatus = p
 		d.lock.Unlock()
-		d.changed <- true
+
+		if old != "" {
+			d.changed <- true
+		}
 	} else {
 		d.lock.Unlock()
 	}
