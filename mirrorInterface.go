@@ -44,15 +44,16 @@ func NewMirrorInterface(weatherURL string, changed chan<- socketResponse, persis
 		persistenceFile: persistenceFile,
 	}
 
+	log.Printf("starting changed loop")
+	go mi.handleChanged()
+
 	if b, err := ioutil.ReadFile(persistenceFile); err == nil {
 		if err = json.Unmarshal(b, mi); err != nil {
 			log.Printf("error reading persistence file: %v", err)
 		}
 	}
 
-	log.Printf("starting changed loop")
-	go mi.handleChanged()
-	log.Printf("don creating mirror interface")
+	log.Printf("done creating mirror interface")
 	return mi
 }
 
