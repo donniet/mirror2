@@ -90,8 +90,8 @@ func main() {
 
 			log.Printf("starting person detector")
 			go func() {
-				for p := range personDetected {
-					log.Printf("person detected: %s", p)
+				for _ = range personDetected {
+					// log.Printf("person detected: %s", p)
 				}
 				// log.Printf("person detector ended, exiting")
 				// os.Exit(-1)
