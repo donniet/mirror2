@@ -10,6 +10,8 @@ import (
 	"os"
 	"text/template"
 	"time"
+	"image"
+	"image/jpeg"
 
 	"github.com/donniet/mvnc"
 )
@@ -26,6 +28,8 @@ var (
 	detectionThreshold float64 = 0.75
 	addr               string  = ":8080"
 	persistenceFile    string  = "persist.json"
+	imageMean float32 = 25
+	imageStddev float32 = 30
 )
 
 func init() {
@@ -40,6 +44,12 @@ func init() {
 	flag.IntVar(&totalMotion, "totalMotion", totalMotion, "total motion vectors to trigger screen")
 	flag.StringVar(&addr, "addr", addr, "address to host")
 	flag.StringVar(&persistenceFile, "persistenceFile", persistenceFile, "file to persist to")
+	flag.FloatVar(&imageMean, "imageMean", imageMean, "mean image value")
+	flag.FloatVar(&imageStddev, "imageStddev", imageStddev, "stddev image value")
+}
+
+type Imager interface {
+	Image() image.Image
 }
 
 func main() {
@@ -53,6 +63,8 @@ func main() {
 
 	var socketHandler *socketHandler
 	changed := make(chan socketResponse)
+
+	var imager Imager
 
 	go func() {
 		for obj := range changed {
@@ -81,17 +93,23 @@ func main() {
 				log.Fatal(err)
 			}
 
-			personDetected := mvnc.Graph{
+			personDetector := &mvnc.Graph{
 				GraphFile: graphFile,
-				Names:     map[int]string{0: "donnie", 1: "lauren"},
+				Names:     map[int]string{0: "lauren", 1: "donnie"},
 				Threshold: float32(detectionThreshold),
 				Throttle:  100 * time.Millisecond,
-			}.Process(vid)
+				Mean: imageMean,
+				Stddev: imageStddev,
+			}
+
+			imager = personDetector
+
+			personDetected := personDetector.Process(vid)
 
 			log.Printf("starting person detector")
 			go func() {
 				for _ = range personDetected {
-					// log.Printf("person detected: %s", p)
+					log.Printf("person detected: %s", p)
 				}
 				// log.Printf("person detector ended, exiting")
 				// os.Exit(-1)
@@ -166,6 +184,14 @@ func main() {
 	http.Handle("/api/uisocket", socketHandler)
 	http.Handle("/api/v1/", http.StripPrefix("/api/v1/", &ServeInterface{ui}))
 	http.Handle("/api/v2/", http.StripPrefix("/api/v2/", &API{mirror: ui}))
+	http.HandleFunc("/api/image", func(w http.ResponseWriter, r *http.Request) {
+		if imager == nil {
+			http.Error(w, "no images found", 404)
+			return
+		}
+
+		jpeg.Encode(w, imager.Image(), &jpeg.Options{75})
+	})
 
 	log.Printf("serving on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
