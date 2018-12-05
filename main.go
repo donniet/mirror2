@@ -28,8 +28,8 @@ var (
 	detectionThreshold float64 = 0.75
 	addr               string  = ":8080"
 	persistenceFile    string  = "persist.json"
-	imageMean float32 = 25
-	imageStddev float32 = 30
+	imageMean float64 = 25
+	imageStddev float64 = 30
 )
 
 func init() {
@@ -44,8 +44,8 @@ func init() {
 	flag.IntVar(&totalMotion, "totalMotion", totalMotion, "total motion vectors to trigger screen")
 	flag.StringVar(&addr, "addr", addr, "address to host")
 	flag.StringVar(&persistenceFile, "persistenceFile", persistenceFile, "file to persist to")
-	flag.FloatVar(&imageMean, "imageMean", imageMean, "mean image value")
-	flag.FloatVar(&imageStddev, "imageStddev", imageStddev, "stddev image value")
+	flag.Float64Var(&imageMean, "imageMean", imageMean, "mean image value")
+	flag.Float64Var(&imageStddev, "imageStddev", imageStddev, "stddev image value")
 }
 
 type Imager interface {
@@ -98,8 +98,8 @@ func main() {
 				Names:     map[int]string{0: "lauren", 1: "donnie"},
 				Threshold: float32(detectionThreshold),
 				Throttle:  100 * time.Millisecond,
-				Mean: imageMean,
-				Stddev: imageStddev,
+				Mean: float32(imageMean),
+				Stddev: float32(imageStddev),
 			}
 
 			imager = personDetector
@@ -108,7 +108,7 @@ func main() {
 
 			log.Printf("starting person detector")
 			go func() {
-				for _ = range personDetected {
+				for p := range personDetected {
 					log.Printf("person detected: %s", p)
 				}
 				// log.Printf("person detector ended, exiting")
